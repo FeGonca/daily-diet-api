@@ -1,7 +1,8 @@
-from flask_login import LoginManager, login_user, logout_user, login_required
-from models.user import User
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from models.user import User, Meal
 from flask import Flask, request, jsonify
 from database import db
+import datetime
 import bcrypt
 
 
@@ -69,6 +70,107 @@ def logout():
     logout_user()
     return jsonify({'message': 'Lougout realizado com sucesso!'})
 
+# Create Meal
+@app.route('/meal', methods=['POST'])
+@login_required
+def create_meal():
+    data = request.json
+    name = data.get('name')
+    description = data.get('description')
+    diet_flag = data.get('diet_flag')
+    date_created = data.get('date_created')
+
+    if name and description and date_created and (diet_flag is not None):
+        meal = Meal(
+            name=name,
+            description=description,
+            diet_flag=diet_flag,
+            date_created=date_created,
+            user_id=current_user.id,
+            updated_at=date_created
+        )
+        db.session.add(meal)
+        db.session.commit()
+
+        return jsonify({'message': 'Refeição criada com sucesso!'})
+    
+    return jsonify({'message': 'Dados Inválidos'}), 400
+
+# Read Meal
+@app.route('/meal', methods=['GET'])
+@login_required
+def read_meal():
+    meal = Meal.query.filter_by(user_id = current_user.id)
+
+    if meal.count() > 0:
+        return jsonify({'meals': [{
+            'id': m.id,
+            'name': m.name,
+            'description': m.description,
+            'diet_flag': m.diet_flag,
+            'date_created': m.date_created
+        } for m in meal]})
+    
+    return jsonify({'message': 'Usuário não possui refeições cadastradas'}), 404
+
+@app.route('/meal/<int:id>', methods=['GET'])
+@login_required
+def show_meal(id):
+    meal = Meal.query.filter_by(user_id = current_user.id, id=id)
+
+    if meal.count() > 0:
+        return jsonify({'meal': [{
+            'id': m.id,
+            'name': m.name,
+            'description': m.description,
+            'diet_flag': m.diet_flag,
+            'date_created': m.date_created
+        } for m in meal]})
+    
+    return jsonify({'message': 'Refeição não encontrada'}), 404
+
+
+# Update Meal
+@app.route('/meal/<int:id_meal>', methods=['PUT'])
+@login_required
+def update_meal(id_meal):
+    data = request.json
+    meal = Meal.query.get(id_meal)
+
+    print(f'Teste: {meal.user_id}')
+
+    if meal.user_id != current_user.id:
+        return jsonify({'message': 'Operação não permitida'})
+    
+    if meal:
+        meal.name = data.get('name')
+        meal.description = data.get('description')
+        meal.diet_flag = data.get('diet_flag')
+        meal.updated_at = datetime.datetime.now()
+
+        db.session.commit()
+
+        return jsonify({'message': f'A refeição {id_meal} atualizada com sucesso'})
+
+    return jsonify({'message': 'Refeição não encontrado'}), 404
+
+# Delete Meal
+@app.route('/meal/<int:id_meal>', methods=['DELETE'])
+@login_required
+def delete(id_meal):
+    # data = request.json
+    meal = Meal.query.get(id_meal)
+
+    if meal.user_id != current_user.id:
+        return jsonify({'message': 'Operação não permitida'})
+    
+    if meal:
+        db.session.delete(meal)
+        db.session.commit()
+
+        return jsonify({'message': f'Refeição {id_meal} deletada com sucesso'})
+    
+    return jsonify({'message': 'Refeição não encontrada'})
 
 
 
